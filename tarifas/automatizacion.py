@@ -4,6 +4,7 @@ from typing import Callable, Protocol
 
 from . import configuracion
 from .calculo import preparar_dias, validar_importe
+from .formato import formatear_precio
 
 
 logger = logging.getLogger(__name__)
@@ -34,9 +35,9 @@ class ControlesPyAutoGUI:
 
 
 def escribir_tarifas(tarifas, controles: Controles | None = None, *, pausa=None,
-                     separador_decimal=".") -> None:
+                     separador_decimal=None) -> None:
     """Escribe desde la casilla enfocada. Incluye TAB tras la última tarifa."""
-    if separador_decimal not in (".", ","):
+    if separador_decimal is not None and separador_decimal not in (".", ","):
         raise ValueError("El separador decimal debe ser '.' o ','.")
     espera = validar_importe(
         configuracion.PAUSA_ENTRE_CAMPOS if pausa is None else pausa,
@@ -44,7 +45,7 @@ def escribir_tarifas(tarifas, controles: Controles | None = None, *, pausa=None,
     )
     # Materializar y validar todo antes de emitir la primera pulsación.
     textos = [
-        format(validar_importe(tarifa, "Tarifa"), "f").replace(".", separador_decimal)
+        formatear_precio(tarifa, separador_decimal)
         for tarifa in tarifas
     ]
     if not textos:
@@ -58,7 +59,7 @@ def escribir_tarifas(tarifas, controles: Controles | None = None, *, pausa=None,
 
 def procesar_dias(precios_exe=None, orden=None, *, controles: Controles | None = None,
                   cambiar_dia: Callable[[int], None] | None = None,
-                  pausa=None, separador_decimal=".") -> None:
+                  pausa=None, separador_decimal=None) -> None:
     """cambiar_dia recibe el número del próximo día (desde 2) y enfoca su primera casilla."""
     dias = preparar_dias(precios_exe, orden)
     if cambiar_dia is not None and not callable(cambiar_dia):

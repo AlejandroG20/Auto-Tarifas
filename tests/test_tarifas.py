@@ -70,8 +70,8 @@ class TarifasTests(unittest.TestCase):
                       cambiar_dia=eventos.navegar, pausa=0)
         from unittest.mock import call
         self.assertEqual(eventos.mock_calls, [
-            call.escribir("90"), call.pulsar_tab(), call.pausar(0.0),
-            call.navegar(2), call.escribir("95"), call.pulsar_tab(), call.pausar(0.0),
+            call.escribir("90.00"), call.pulsar_tab(), call.pausar(0.0),
+            call.navegar(2), call.escribir("95.00"), call.pulsar_tab(), call.pausar(0.0),
         ])
 
     def test_escritura_valida_toda_la_lista(self):
