@@ -99,3 +99,90 @@ def generar_tarifas_diarias(seleccion: CampoTarifa, precios_exe=None) -> list[De
     validar_seleccion(seleccion.tipo_habitacion, seleccion.personas,
                       seleccion.desayuno, seleccion.no_reembolsable)
     return [dia.tarifas[0] for dia in preparar_dias(precios_exe, [seleccion])]
+
+
+def obtener_precios_mes(mes: str) -> tuple:
+    """Resuelve el mes sin modificar los precios configurados."""
+    if not isinstance(mes, str) or mes not in configuracion.PRECIOS_2027:
+        raise ValueError(f"Mes no valido: {mes!r}.")
+    return tuple(configuracion.PRECIOS_2027[mes])
+
+
+@dataclass(frozen=True)
+class TarifasFila:
+    personas: int
+    tarifas: tuple[Decimal, ...]
+
+
+def generar_tarifas_filas(seleccion: CampoTarifa, precios_exe) -> tuple[TarifasFila, ...]:
+    """Genera todos los dias de cada ocupacion antes de pasar a la siguiente."""
+    if not isinstance(seleccion, CampoTarifa):
+        raise ValueError("La seleccion debe ser un CampoTarifa.")
+    tipo = "INDIVIDUAL" if seleccion.tipo_habitacion == "EXE" else seleccion.tipo_habitacion
+    if tipo not in configuracion.OCUPACIONES:
+        raise ValueError(f"Tipo de habitacion no valido: {tipo!r}.")
+    precios = tuple(precios_exe)
+    return tuple(
+        TarifasFila(personas, tuple(generar_tarifas_diarias(
+            CampoTarifa(tipo, personas, seleccion.desayuno, seleccion.no_reembolsable), precios
+        )))
+        for personas in configuracion.OCUPACIONES[tipo]
+    )
+
+
+@dataclass(frozen=True)
+class FilaCircuito:
+    seleccion: CampoTarifa
+    modalidad: str
+    tarifas: tuple[Decimal, ...]
+    ocupacion: tuple[int, int] | None = None
+
+
+def generar_circuito_completo(precios_exe) -> tuple[FilaCircuito, ...]:
+    """Habitacion -> modalidad -> ocupacion -> todos los dias del mes."""
+    precios = tuple(precios_exe)
+    return tuple(
+        FilaCircuito(
+            CampoTarifa(tipo, fila.personas, desayuno, no_reembolsable), nombre, fila.tarifas
+        )
+        for tipo in configuracion.ORDEN_HABITACIONES
+        for nombre, desayuno, no_reembolsable in configuracion.MODALIDADES
+        for fila in generar_tarifas_filas(
+            CampoTarifa(tipo, desayuno=desayuno, no_reembolsable=no_reembolsable), precios
+        )
+    )
+
+
+def obtener_precios_bimestre(bimestre: tuple[str, str]) -> tuple:
+    if bimestre not in configuracion.BIMESTRES_MIRAI:
+        raise ValueError(f"Bimestre no valido: {bimestre!r}.")
+    # Una fila debe contener ambos meses completos para no desplazar las casillas.
+    from calendar import monthrange
+    meses = tuple(mes for pareja in configuracion.BIMESTRES_MIRAI for mes in pareja)
+    precios = ()
+    for mes in bimestre:
+        valores = obtener_precios_mes(mes)
+        dias = monthrange(2027, meses.index(mes) + 1)[1]
+        if len(valores) != dias:
+            raise ValueError(f"{mes} debe contener {dias} precios para Mirai.")
+        precios += valores
+    return precios
+
+
+def generar_circuito_mirai(precios_exe) -> tuple[FilaCircuito, ...]:
+    """Habitacion -> BAR/NRF -> ocupacion -> SA/AD -> dias de ambos meses."""
+    precios = tuple(precios_exe)
+    return tuple(
+        FilaCircuito(
+            CampoTarifa(tipo, adultos + menores, desayuno, nr),
+            f"{modalidad} | {'Desayuno Incluido' if desayuno else 'Solo Alojamiento'}",
+            tuple(generar_tarifas_diarias(
+                CampoTarifa(tipo, adultos + menores, desayuno, nr), precios,
+            )),
+            (adultos, menores),
+        )
+        for tipo, ocupaciones in configuracion.OCUPACIONES_MIRAI.items()
+        for modalidad, nr in (("BAR", False), ("NRF", True))
+        for adultos, menores in ocupaciones
+        for desayuno in (False, True)
+    )

@@ -1,10 +1,12 @@
 import logging
+from contextlib import nullcontext
 import time
 from typing import Callable, Protocol
 
 from . import configuracion
 from .calculo import preparar_dias, validar_importe
 from .formato import formatear_precio
+from .pausa import PausaEscritura
 
 
 logger = logging.getLogger(__name__)
@@ -50,11 +52,17 @@ def escribir_tarifas(tarifas, controles: Controles | None = None, *, pausa=None,
     ]
     if not textos:
         return
+    pausa_global = PausaEscritura() if controles is None else None
     controles = controles if controles is not None else ControlesPyAutoGUI()
-    for texto in textos:
-        controles.escribir(texto)
-        controles.pulsar_tab()
-        controles.pausar(float(espera))
+    contexto = pausa_global.activar() if pausa_global is not None else nullcontext()
+    with contexto:
+        for texto in textos:
+            if pausa_global is not None:
+                pausa_global.esperar()
+            # Completar precio y TAB antes de detenerse para conservar la casilla.
+            controles.escribir(texto)
+            controles.pulsar_tab()
+            controles.pausar(float(espera))
 
 
 def procesar_dias(precios_exe=None, orden=None, *, controles: Controles | None = None,

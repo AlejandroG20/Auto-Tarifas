@@ -48,12 +48,13 @@ class SeleccionTests(unittest.TestCase):
         self.assertEqual(generar_tarifas_diarias(CampoTarifa("EXE"), [100, 90, 100]), [100, 90, 100])
 
     def test_entrada_reintenta(self):
-        leer = Mock(side_effect=["x", "5", "2", "0", "1", "-1", "0", "1.5", "2", "3", "2"])
-        self.assertEqual(seleccionar_tarifa(leer, Mock()), CampoTarifa("PREMIUM", 2, True, True))
+        leer = Mock(side_effect=["x", "6", "3", "0", "1", "3", "2"])
+        self.assertEqual(seleccionar_tarifa(leer, Mock()), CampoTarifa("PREMIUM", desayuno=True, no_reembolsable=True))
+        self.assertEqual(leer.call_count, 7)
 
     def test_sin_desayuno_no_pide_huespedes(self):
         leer = Mock(side_effect=["1", "2", "1"])
-        self.assertEqual(seleccionar_tarifa(leer, Mock()), CampoTarifa("EXE"))
+        self.assertEqual(seleccionar_tarifa(leer, Mock()), CampoTarifa("INDIVIDUAL"))
         self.assertEqual(leer.call_count, 3)
 
     def test_formato_centralizado(self):
@@ -63,24 +64,22 @@ class SeleccionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             formatear_precio(Decimal("0.001"))
 
-    def test_consola_escribe_tres_dias_solo_con_tabs(self):
-        controles, esperar = Mock(), Mock()
+    def test_consola_resumen_circuito(self):
+        controles, esperar, leer = Mock(), Mock(), Mock(side_effect=["1", "2"])
         with self.assertLogs("tarifas.registros", level="INFO") as logs:
-            ejecutar([90, 100, 110], controles=controles,
-                     leer=Mock(side_effect=["2", "1", "2", "2"]), mostrar=Mock(), esperar=esperar)
-        self.assertEqual(controles.mock_calls, [
-            call.escribir("136.80"), call.pulsar_tab(), call.pausar(0.1),
-            call.escribir("146.30"), call.pulsar_tab(), call.pausar(0.1),
-            call.escribir("155.80"), call.pulsar_tab(), call.pausar(0.1),
-        ])
+            ejecutar([90, 100, 110], controles=controles, leer=leer,
+                     mostrar=Mock(), esperar=esperar)
+        self.assertEqual(leer.call_count, 2)
         esperar.assert_called_once()
+        self.assertEqual(controles.escribir.call_count, 144)
         self.assertIn("DÍAS A PROCESAR: 3", logs.output[0])
-        self.assertIn("TARIFA FINAL: 136.80 €", logs.output[1])
+        self.assertIn("FILAS: 48", logs.output[0])
+        self.assertIn("TARIFA FINAL: 90.00", logs.output[2])
 
     def test_dia_invalido_no_escribe(self):
         controles, esperar = Mock(), Mock()
         with self.assertRaises(ValueError):
-            ejecutar([90, -1], controles=controles, leer=Mock(side_effect=["1", "2", "1"]),
+            ejecutar([90, -1], controles=controles, leer=Mock(side_effect=["1", "2"]),
                      mostrar=Mock(), esperar=esperar)
         self.assertEqual(controles.mock_calls, [])
         esperar.assert_not_called()

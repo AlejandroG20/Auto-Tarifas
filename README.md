@@ -4,29 +4,37 @@ Base modular para Python 3.10 o posterior. No ejecuta pulsaciones al importar m�
 
 ## Uso por consola
 
-Instalar `pip install -r requirements.txt`. Editar `tarifas/configuracion.py`, por ejemplo:
+Instalar `pip install -r requirements.txt` y ejecutar `python -m tarifas`.
 
-```python
-PRECIOS_EXE = [Decimal("90"), Decimal("100"), Decimal("110")]
-```
+Al arrancar, elegir primero **1. FNS** o **2. Mirai**.
 
-Los precios base son EXE sin desayuno y reembolsables. Ejecutar desde esta carpeta:
+En FNS, seleccionar el mes de `PRECIOS_2027`. El programa prepara el circuito
+completo de Individual, Doble Executive, Premium, Suite y Triple, en ese orden.
+En cada habitacion escribe los cuatro bloques mostrados por el programa externo:
 
-```text
-python -m tarifas
-```
+1. Tarifa estandar (sin desayuno).
+2. Oferta no reembolsable (sin desayuno, -5 %).
+3. No reembolsable HD (con desayuno, -5 % sobre el total).
+4. Alojamiento con desayuno incluido (estandar).
 
-Seleccionar habitación, desayuno, huéspedes (solo con desayuno) y modalidad.
-Se muestra el resumen y todos los precios; después hay 5 segundos para enfocar la
-primera casilla del programa externo. Esta espera se configura en `SEGUNDOS_PARA_ENFOCAR`.
-Ctrl+C cancela mientras la consola tenga el foco.
-Con el array vacío se informa de que faltan precios y no se ejecutan pulsaciones.
+Dentro de cada bloque completa todos los dias de 1 Pax, despues 2 Pax, etc.
+Ocupaciones: Individual 1; Doble y Premium 1-2; Suite 1-4; Triple 1-3.
+Son 48 filas: 1.440 precios en un mes de 30 dias.
+Se mantienen los suplementos y el desayuno de 12 euros por huesped.
 
-PREMIUM con desayuno para 2 huéspedes y no reembolsable genera:
-`136.80 → TAB → 146.30 → TAB → 155.80 → TAB`.
-Este flujo de una única combinación usa directamente `escribir_tarifas`, sin necesitar
-`ORDEN_TARIFAS` ni añadir navegación. Los campos diarios deben estar dispuestos en
-la secuencia de TAB solicitada.
+Tras el resumen hay 5 segundos para enfocar el dia 1 de Individual, tarifa
+estandar, 1 Pax. La escritura continua mediante `PRECIO -> TAB`, incluido el
+ultimo TAB, sin agregar navegacion ni pulsar Guardar. El mes mostrado en el
+programa externo debe coincidir con el seleccionado. Al terminar, revisar y guardar
+los cambios en el programa externo. Ctrl+C cancela en la consola.
+
+`ORDEN_HABITACIONES` y `MODALIDADES` definen el orden del circuito;
+`generar_circuito_completo` calcula y valida sus filas antes de escribir.
+Las API de seleccion y calculo de una sola tarifa se conservan para integraciones.
+
+Los precios base se mantienen en `PRECIOS_2027`; ya no hay que cambiar `PRECIOS_EXE`
+para elegir mes. Un mes vacio no escribe. Los valores pendientes `None` se rechazan
+antes de cualquier pulsacion; completar esos precios antes de utilizar ese mes.
 
 El descuento central `DESCUENTO_NO_REEMBOLSABLE = Decimal("0.05")` se aplica al total,
 incluido el desayuno. Se calcula con `Decimal` y solo al final se redondea a céntimos
@@ -50,7 +58,7 @@ válida. Nunca se admiten ocupaciones negativas. La modalidad debe ser un boolea
 
 ## Estructura
 
-- `tarifas/configuracion.py`: suplementos, desayuno, `PRECIOS_EXE`, orden de campos y pausas.
+- `tarifas/configuracion.py`: ocupaciones, suplementos, desayuno, `PRECIOS_2027`, orden de campos y pausas.
 - `tarifas/calculo.py`: cálculo independiente de PyAutoGUI, con importes `Decimal` sin redondeo implícito.
 - `tarifas/automatizacion.py`: adaptador de teclado, escritura y coordinación de días.
 - `tarifas/entrada.py`: menús con reintentos ante entradas inválidas.
@@ -58,7 +66,9 @@ válida. Nunca se admiten ocupaciones negativas. La modalidad debe ser un boolea
 - `tarifas/registros.py`: resumen y logs diarios.
 - `tarifas/consola.py`: coordinación; `__main__.py`: punto de entrada.
 
-Introducir los precios diarios EXE sin desayuno en `PRECIOS_EXE`, respetando su orden.
+Introducir los precios diarios EXE sin desayuno en cada mes de `PRECIOS_2027`, respetando su orden.
+`PRECIOS_EXE` y las API anteriores se conservan para integraciones existentes.
+`generar_tarifas_filas` devuelve las filas de ocupacion y sus importes diarios.
 `calcular_precio(90, "TRIPLE", personas=3, desayuno=True)` devuelve `Decimal('151.00')`.
 Sin desayuno, la ocupación no cambia el importe. Se rechazan precios no positivos,
 valores no finitos, tipos desconocidos y ocupaciones negativas o no enteras.
@@ -97,3 +107,45 @@ por día en el flujo anterior; sus tarifas individuales solo aparecen en nivel D
 La consola activa INFO y muestra la configuración, el número de días y cada precio final.
 
 Pruebas: `python -m unittest discover -s tests -v`.
+
+
+## Mirai
+
+Cada ejecucion procesa una sola habitacion. Elegir el bimestre y despues
+1. EXE, 2. Premium, 3. Triple o 4. Suite. Al terminar se detiene; volver a
+ejecutar el programa para la siguiente habitacion.
+
+Elegir un bimestre de 2027: enero-febrero, marzo-abril, mayo-junio,
+julio-agosto, septiembre-octubre o noviembre-diciembre. Los precios proceden
+de los mismos meses de `PRECIOS_2027`; se concatenan los dias de ambos meses.
+Se exige que ambos meses tengan todos sus precios antes de escribir.
+
+Orden: EXE, Premium, Triple y Suite. En cada habitacion se completa BAR y
+despues NRF (-5 %). Para cada ocupacion se escribe Solo Alojamiento y despues
+Desayuno Incluido, recorriendo todos los dias del bimestre en cada fila.
+
+- EXE y Premium: 2 + 0, 1 + 0, 1 + 1.
+- Triple: 2 + 1, 3 + 0.
+- Suite: 2 + 0, 2 + 1, 4 + 0, 3 + 0, 3 + 1, 1 + 0, 1 + 1.
+
+El desayuno cuenta adultos y menores a 12 euros por persona; NRF descuenta
+el total con desayuno. Son 12 filas para EXE, 12 para Premium, 8 para Triple y 28 para Suite. Mirai utiliza coma decimal, configurable
+con `SEPARADOR_DECIMAL_MIRAI`. Los ceros de las capturas son valores existentes,
+no precios base nuevos: el programa calcula los importes desde `PRECIOS_2027`.
+
+Enfocar el dia 1 de la habitacion elegida, BAR, Solo Alojamiento: ocupacion
+2 + 1 para Triple y 2 + 0 para EXE, Premium o Suite.
+El bimestre visible en Mirai debe coincidir con el elegido y las habitaciones
+deben estar desplegadas. Se conserva la escritura precio -> TAB; revisar
+y guardar manualmente al terminar. La navegacion real de Mirai requiere
+comprobar que TAB recorre esas casillas en el orden mostrado.
+
+
+## Pausar la escritura
+
+En Windows, pulsar **F8** durante la escritura para pausarla y volver a pulsar
+**F8** para continuar. Funciona con FNS o Mirai enfocado. Se completa el precio
+y TAB en curso antes de pausar; se reanuda desde la siguiente casilla pendiente.
+Mantener el foco en esa casilla antes de reanudar. Ctrl+C en la consola cancela
+tambien durante la pausa. El atajo solo esta activo durante la escritura real
+y se libera al finalizar o cancelar.
